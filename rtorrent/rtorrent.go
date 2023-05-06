@@ -1,18 +1,54 @@
 package rtorrent
 
 import (
+	"context"
 	"fmt"
-	"net/http"
+	"io"
+	"log"
 	"time"
 
-	"github.com/mrobinsn/go-rtorrent/xmlrpc"
+	"github.com/autobrr/go-rtorrent/xmlrpc"
+
 	"github.com/pkg/errors"
 )
 
-// RTorrent is used to communicate with a remote rTorrent instance
-type RTorrent struct {
+// Client is used to communicate with a remote rTorrent instance
+type Client struct {
 	addr         string
 	xmlrpcClient *xmlrpc.Client
+
+	log *log.Logger
+}
+
+type Config struct {
+	Addr          string
+	TLSSkipVerify bool
+
+	BasicUser string
+	BasicPass string
+
+	Log *log.Logger
+}
+
+// NewClient returns a new instance of `Client`
+func NewClient(cfg Config) *Client {
+	c := &Client{
+		addr: cfg.Addr,
+		log:  log.New(io.Discard, "", log.LstdFlags),
+		xmlrpcClient: xmlrpc.NewClient(xmlrpc.Config{
+			Addr:          cfg.Addr,
+			TLSSkipVerify: cfg.TLSSkipVerify,
+			BasicUser:     cfg.BasicUser,
+			BasicPass:     cfg.BasicPass,
+		}),
+	}
+
+	// override logger if we pass one
+	if cfg.Log != nil {
+		c.log = cfg.Log
+	}
+
+	return c
 }
 
 // FieldValue contains the Field and Value of an attribute on a rTorrent
@@ -51,10 +87,10 @@ type File struct {
 	Size int
 }
 
-// Field represents a attribute on a RTorrent entity that can be queried or set
+// Field represents an attribute on a Client entity that can be queried or set
 type Field string
 
-// View represents a "view" within RTorrent
+// View represents a "view" within Client
 type View string
 
 const (
@@ -108,7 +144,8 @@ const (
 
 // Query converts the field to a string which allows it to be queried
 // Example:
-//  DName.Query() // returns "d.name="
+//
+//	DName.Query() // returns "d.name="
 func (f Field) Query() string {
 	return fmt.Sprintf("%s=", f)
 }
@@ -118,7 +155,7 @@ func (f Field) SetValue(value string) *FieldValue {
 	return &FieldValue{f, value}
 }
 
-// Cmd returns the representation of the field which allows it to be used a command with RTorrent
+// Cmd returns the representation of the field which allows it to be used a command with Client
 func (f Field) Cmd() string {
 	return string(f)
 }
@@ -137,36 +174,27 @@ func (f *File) Pretty() string {
 	return fmt.Sprintf("File:\n\tPath: %v\n\tSize: %v bytes\n", f.Path, f.Size)
 }
 
-// New returns a new instance of `RTorrent`
-// Pass in a true value for `insecure` to turn off certificate verification
-func New(addr string, insecure bool) *RTorrent {
-	return &RTorrent{
-		addr:         addr,
-		xmlrpcClient: xmlrpc.NewClient(addr, insecure),
-	}
-}
-
-// WithHTTPClient allows you to a provide a custom http.Client.
-func (r *RTorrent) WithHTTPClient(client *http.Client) *RTorrent {
-	r.xmlrpcClient = xmlrpc.NewClientWithHTTPClient(r.addr, client)
-	return r
-}
-
 // AddStopped adds a new torrent by URL in a stopped state
 //
 // extraArgs can be any valid rTorrent rpc command. For instance:
 //
 // Adds the Torrent by URL (stopped) and sets the label on the torrent
-//  AddStopped("some-url", &FieldValue{"d.custom1", "my-label"})
+//
+//	AddStopped("some-url", &FieldValue{"d.custom1", "my-label"})
+//
 // Or:
-//  AddStopped("some-url", DLabel.SetValue("my-label"))
+//
+//	AddStopped("some-url", DLabel.SetValue("my-label"))
 //
 // Adds the Torrent by URL (stopped) and  sets the label and base path
-//  AddStopped("some-url", &FieldValue{"d.custom1", "my-label"}, &FiedValue{"d.base_path", "/some/valid/path"})
+//
+//	AddStopped("some-url", &FieldValue{"d.custom1", "my-label"}, &FiedValue{"d.base_path", "/some/valid/path"})
+//
 // Or:
-//  AddStopped("some-url", DLabel.SetValue("my-label"), DBasePath.SetValue("/some/valid/path"))
-func (r *RTorrent) AddStopped(url string, extraArgs ...*FieldValue) error {
-	return r.add("load.normal", []byte(url), extraArgs...)
+//
+//	AddStopped("some-url", DLabel.SetValue("my-label"), DBasePath.SetValue("/some/valid/path"))
+func (r *Client) AddStopped(ctx context.Context, url string, extraArgs ...*FieldValue) error {
+	return r.add(ctx, "load.normal", []byte(url), extraArgs...)
 }
 
 // Add adds a new torrent by URL and starts the torrent
@@ -174,16 +202,22 @@ func (r *RTorrent) AddStopped(url string, extraArgs ...*FieldValue) error {
 // extraArgs can be any valid rTorrent rpc command. For instance:
 //
 // Adds the Torrent by URL and sets the label on the torrent
-//  Add("some-url", "d.custom1.set=\"my-label\"")
+//
+//	Add("some-url", "d.custom1.set=\"my-label\"")
+//
 // Or:
-//  Add("some-url", DLabel.SetValue("my-label"))
+//
+//	Add("some-url", DLabel.SetValue("my-label"))
 //
 // Adds the Torrent by URL and  sets the label as well as base path
-//  Add("some-url", "d.custom1.set=\"my-label\"", "d.base_path=\"/some/valid/path\"")
+//
+//	Add("some-url", "d.custom1.set=\"my-label\"", "d.base_path=\"/some/valid/path\"")
+//
 // Or:
-//  Add("some-url", DLabel.SetValue("my-label"), DBasePath.SetValue("/some/valid/path"))
-func (r *RTorrent) Add(url string, extraArgs ...*FieldValue) error {
-	return r.add("load.start", []byte(url), extraArgs...)
+//
+//	Add("some-url", DLabel.SetValue("my-label"), DBasePath.SetValue("/some/valid/path"))
+func (r *Client) Add(ctx context.Context, url string, extraArgs ...*FieldValue) error {
+	return r.add(ctx, "load.start", []byte(url), extraArgs...)
 }
 
 // AddTorrentStopped adds a new torrent by the torrent files data but does not start the torrent
@@ -191,16 +225,22 @@ func (r *RTorrent) Add(url string, extraArgs ...*FieldValue) error {
 // extraArgs can be any valid rTorrent rpc command. For instance:
 //
 // Adds the Torrent file (stopped) and sets the label on the torrent
-//  AddTorrentStopped(fileData, "d.custom1.set=\"my-label\"")
+//
+//	AddTorrentStopped(fileData, "d.custom1.set=\"my-label\"")
+//
 // Or:
-//  AddTorrentStopped(fileData, DLabel.SetValue("my-label"))
+//
+//	AddTorrentStopped(fileData, DLabel.SetValue("my-label"))
 //
 // Adds the Torrent file and (stopped) sets the label and base path
-//  AddTorrentStopped(fileData, "d.custom1.set=\"my-label\"", "d.base_path=\"/some/valid/path\"")
+//
+//	AddTorrentStopped(fileData, "d.custom1.set=\"my-label\"", "d.base_path=\"/some/valid/path\"")
+//
 // Or:
-//  AddTorrentStopped(fileData, DLabel.SetValue("my-label"), DBasePath.SetValue("/some/valid/path"))
-func (r *RTorrent) AddTorrentStopped(data []byte, extraArgs ...*FieldValue) error {
-	return r.add("load.raw", data, extraArgs...)
+//
+//	AddTorrentStopped(fileData, DLabel.SetValue("my-label"), DBasePath.SetValue("/some/valid/path"))
+func (r *Client) AddTorrentStopped(ctx context.Context, data []byte, extraArgs ...*FieldValue) error {
+	return r.add(ctx, "load.raw", data, extraArgs...)
 }
 
 // AddTorrent adds a new torrent by the torrent files data and starts the torrent
@@ -208,34 +248,40 @@ func (r *RTorrent) AddTorrentStopped(data []byte, extraArgs ...*FieldValue) erro
 // extraArgs can be any valid rTorrent rpc command. For instance:
 //
 // Adds the Torrent file and sets the label on the torrent
-//  Add(fileData, "d.custom1.set=\"my-label\"")
+//
+//	Add(fileData, "d.custom1.set=\"my-label\"")
+//
 // Or:
-//  AddTorrent(fileData, DLabel.SetValue("my-label"))
+//
+//	AddTorrent(fileData, DLabel.SetValue("my-label"))
 //
 // Adds the Torrent file and  sets the label and base path
-//  Add(fileData, "d.custom1.set=\"my-label\"", "d.base_path=\"/some/valid/path\"")
+//
+//	Add(fileData, "d.custom1.set=\"my-label\"", "d.base_path=\"/some/valid/path\"")
+//
 // Or:
-//  AddTorrent(fileData, DLabel.SetValue("my-label"), DBasePath.SetValue("/some/valid/path"))
-func (r *RTorrent) AddTorrent(data []byte, extraArgs ...*FieldValue) error {
-	return r.add("load.raw_start", data, extraArgs...)
+//
+//	AddTorrent(fileData, DLabel.SetValue("my-label"), DBasePath.SetValue("/some/valid/path"))
+func (r *Client) AddTorrent(ctx context.Context, data []byte, extraArgs ...*FieldValue) error {
+	return r.add(ctx, "load.raw_start", data, extraArgs...)
 }
 
-func (r *RTorrent) add(cmd string, data []byte, extraArgs ...*FieldValue) error {
+func (r *Client) add(ctx context.Context, cmd string, data []byte, extraArgs ...*FieldValue) error {
 	args := []interface{}{data}
 	for _, v := range extraArgs {
 		args = append(args, v.String())
 	}
 
-	_, err := r.xmlrpcClient.Call(cmd, "", args)
+	_, err := r.xmlrpcClient.Call(ctx, cmd, "", args)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("%s XMLRPC call failed", cmd))
 	}
 	return nil
 }
 
-// IP returns the IP reported by this RTorrent instance
-func (r *RTorrent) IP() (string, error) {
-	result, err := r.xmlrpcClient.Call("network.bind_address")
+// IP returns the IP reported by this Client instance
+func (r *Client) IP(ctx context.Context) (string, error) {
+	result, err := r.xmlrpcClient.Call(ctx, "network.bind_address")
 	if err != nil {
 		return "", errors.Wrap(err, "network.bind_address XMLRPC call failed")
 	}
@@ -248,9 +294,9 @@ func (r *RTorrent) IP() (string, error) {
 	return "", errors.Errorf("result isn't string: %v", result)
 }
 
-// Name returns the name reported by this RTorrent instance
-func (r *RTorrent) Name() (string, error) {
-	result, err := r.xmlrpcClient.Call("system.hostname")
+// Name returns the name reported by this Client instance
+func (r *Client) Name(ctx context.Context) (string, error) {
+	result, err := r.xmlrpcClient.Call(ctx, "system.hostname")
 	if err != nil {
 		return "", errors.Wrap(err, "system.hostname XMLRPC call failed")
 	}
@@ -263,9 +309,9 @@ func (r *RTorrent) Name() (string, error) {
 	return "", errors.Errorf("result isn't string: %v", result)
 }
 
-// DownTotal returns the total downloaded metric reported by this RTorrent instance (bytes)
-func (r *RTorrent) DownTotal() (int, error) {
-	result, err := r.xmlrpcClient.Call("throttle.global_down.total")
+// DownTotal returns the total downloaded metric reported by this Client instance (bytes)
+func (r *Client) DownTotal(ctx context.Context) (int, error) {
+	result, err := r.xmlrpcClient.Call(ctx, "throttle.global_down.total")
 	if err != nil {
 		return 0, errors.Wrap(err, "throttle.global_down.total XMLRPC call failed")
 	}
@@ -278,9 +324,9 @@ func (r *RTorrent) DownTotal() (int, error) {
 	return 0, errors.Errorf("result isn't int: %v", result)
 }
 
-// DownRate returns the current download rate reported by this RTorrent instance (bytes/s)
-func (r *RTorrent) DownRate() (int, error) {
-	result, err := r.xmlrpcClient.Call("throttle.global_down.rate")
+// DownRate returns the current download rate reported by this Client instance (bytes/s)
+func (r *Client) DownRate(ctx context.Context) (int, error) {
+	result, err := r.xmlrpcClient.Call(ctx, "throttle.global_down.rate")
 	if err != nil {
 		return 0, errors.Wrap(err, "throttle.global_down.rate XMLRPC call failed")
 	}
@@ -293,9 +339,9 @@ func (r *RTorrent) DownRate() (int, error) {
 	return 0, errors.Errorf("result isn't int: %v", result)
 }
 
-// UpTotal returns the total uploaded metric reported by this RTorrent instance (bytes)
-func (r *RTorrent) UpTotal() (int, error) {
-	result, err := r.xmlrpcClient.Call("throttle.global_up.total")
+// UpTotal returns the total uploaded metric reported by this Client instance (bytes)
+func (r *Client) UpTotal(ctx context.Context) (int, error) {
+	result, err := r.xmlrpcClient.Call(ctx, "throttle.global_up.total")
 	if err != nil {
 		return 0, errors.Wrap(err, "throttle.global_up.total XMLRPC call failed")
 	}
@@ -308,9 +354,9 @@ func (r *RTorrent) UpTotal() (int, error) {
 	return 0, errors.Errorf("result isn't int: %v", result)
 }
 
-// UpRate returns the current upload rate reported by this RTorrent instance (bytes/s)
-func (r *RTorrent) UpRate() (int, error) {
-	result, err := r.xmlrpcClient.Call("throttle.global_up.rate")
+// UpRate returns the current upload rate reported by this Client instance (bytes/s)
+func (r *Client) UpRate(ctx context.Context) (int, error) {
+	result, err := r.xmlrpcClient.Call(ctx, "throttle.global_up.rate")
 	if err != nil {
 		return 0, errors.Wrap(err, "throttle.global_up.rate XMLRPC call failed")
 	}
@@ -323,10 +369,10 @@ func (r *RTorrent) UpRate() (int, error) {
 	return 0, errors.Errorf("result isn't int: %v", result)
 }
 
-// GetTorrents returns all of the torrents reported by this RTorrent instance
-func (r *RTorrent) GetTorrents(view View) ([]Torrent, error) {
+// GetTorrents returns all the torrents reported by this Client instance
+func (r *Client) GetTorrents(ctx context.Context, view View) ([]Torrent, error) {
 	args := []interface{}{"", string(view), DName.Query(), DSizeInBytes.Query(), DHash.Query(), DLabel.Query(), DDirectory.Query(), DIsActive.Query(), DComplete.Query(), DRatio.Query(), DCreationTime.Query(), DFinishedTime.Query(), DStartedTime.Query()}
-	results, err := r.xmlrpcClient.Call("d.multicall2", args...)
+	results, err := r.xmlrpcClient.Call(ctx, "d.multicall2", args...)
 	var torrents []Torrent
 	if err != nil {
 		return torrents, errors.Wrap(err, "d.multicall2 XMLRPC call failed")
@@ -352,59 +398,59 @@ func (r *RTorrent) GetTorrents(view View) ([]Torrent, error) {
 }
 
 // GetTorrent returns the torrent identified by the given hash
-func (r *RTorrent) GetTorrent(hash string) (Torrent, error) {
+func (r *Client) GetTorrent(ctx context.Context, hash string) (Torrent, error) {
 	var t Torrent
 	t.Hash = hash
 	// Name
-	results, err := r.xmlrpcClient.Call("d.name", t.Hash)
+	results, err := r.xmlrpcClient.Call(ctx, "d.name", t.Hash)
 	if err != nil {
 		return t, errors.Wrap(err, "d.name XMLRPC call failed")
 	}
 	t.Name = results.([]interface{})[0].(string)
 	// Size
-	results, err = r.xmlrpcClient.Call("d.size_bytes", t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, "d.size_bytes", t.Hash)
 	if err != nil {
 		return t, errors.Wrap(err, "d.size_bytes XMLRPC call failed")
 	}
 	t.Size = results.([]interface{})[0].(int)
 	// Label
-	results, err = r.xmlrpcClient.Call("d.custom1", t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, "d.custom1", t.Hash)
 	if err != nil {
 		return t, errors.Wrap(err, "d.custom1 XMLRPC call failed")
 	}
 	t.Label = results.([]interface{})[0].(string)
 	// Path
-	results, err = r.xmlrpcClient.Call("d.directory", t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, "d.directory", t.Hash)
 	if err != nil {
 		return t, errors.Wrap(err, "d.directory XMLRPC call failed")
 	}
 	t.Path = results.([]interface{})[0].(string)
 	// Completed
-	results, err = r.xmlrpcClient.Call("d.complete", t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, "d.complete", t.Hash)
 	if err != nil {
 		return t, errors.Wrap(err, "d.complete XMLRPC call failed")
 	}
 	t.Completed = results.([]interface{})[0].(int) > 0
 	// Ratio
-	results, err = r.xmlrpcClient.Call("d.ratio", t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, "d.ratio", t.Hash)
 	if err != nil {
 		return t, errors.Wrap(err, "d.ratio XMLRPC call failed")
 	}
 	t.Ratio = float64(results.([]interface{})[0].(int)) / float64(1000)
 	// Created
-	results, err = r.xmlrpcClient.Call(string(DCreationTime), t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, string(DCreationTime), t.Hash)
 	if err != nil {
 		return t, errors.Wrap(err, fmt.Sprintf("%s XMLRPC call failed", string(DCreationTime)))
 	}
 	t.Created = time.Unix(int64(results.([]interface{})[0].(int)), 0)
 	// Finished
-	results, err = r.xmlrpcClient.Call(string(DFinishedTime), t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, string(DFinishedTime), t.Hash)
 	if err != nil {
 		return t, errors.Wrap(err, fmt.Sprintf("%s XMLRPC call failed", string(DFinishedTime)))
 	}
 	t.Finished = time.Unix(int64(results.([]interface{})[0].(int)), 0)
 	// Started
-	results, err = r.xmlrpcClient.Call(string(DStartedTime), t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, string(DStartedTime), t.Hash)
 	if err != nil {
 		return t, errors.Wrap(err, fmt.Sprintf("%s XMLRPC call failed", string(DStartedTime)))
 	}
@@ -414,18 +460,18 @@ func (r *RTorrent) GetTorrent(hash string) (Torrent, error) {
 }
 
 // Delete removes the torrent
-func (r *RTorrent) Delete(t Torrent) error {
-	_, err := r.xmlrpcClient.Call("d.erase", t.Hash)
+func (r *Client) Delete(ctx context.Context, t Torrent) error {
+	_, err := r.xmlrpcClient.Call(ctx, "d.erase", t.Hash)
 	if err != nil {
 		return errors.Wrap(err, "d.erase XMLRPC call failed")
 	}
 	return nil
 }
 
-// GetFiles returns all of the files for a given `Torrent`
-func (r *RTorrent) GetFiles(t Torrent) ([]File, error) {
+// GetFiles returns all the files for a given `Torrent`
+func (r *Client) GetFiles(ctx context.Context, t Torrent) ([]File, error) {
 	args := []interface{}{t.Hash, 0, FPath.Query(), FSizeInBytes.Query()}
-	results, err := r.xmlrpcClient.Call("f.multicall", args...)
+	results, err := r.xmlrpcClient.Call(ctx, "f.multicall", args...)
 	var files []File
 	if err != nil {
 		return files, errors.Wrap(err, "f.multicall XMLRPC call failed")
@@ -443,50 +489,50 @@ func (r *RTorrent) GetFiles(t Torrent) ([]File, error) {
 }
 
 // SetLabel sets the label on the given Torrent
-func (r *RTorrent) SetLabel(t Torrent, newLabel string) error {
+func (r *Client) SetLabel(ctx context.Context, t Torrent, newLabel string) error {
 	t.Label = newLabel
 	args := []interface{}{t.Hash, newLabel}
-	if _, err := r.xmlrpcClient.Call("d.custom1.set", args...); err != nil {
+	if _, err := r.xmlrpcClient.Call(ctx, "d.custom1.set", args...); err != nil {
 		return errors.Wrap(err, "d.custom1.set XMLRPC call failed")
 	}
 	return nil
 }
 
 // GetStatus returns the Status for a given Torrent
-func (r *RTorrent) GetStatus(t Torrent) (Status, error) {
+func (r *Client) GetStatus(ctx context.Context, t Torrent) (Status, error) {
 	var s Status
 	// Completed
-	results, err := r.xmlrpcClient.Call("d.complete", t.Hash)
+	results, err := r.xmlrpcClient.Call(ctx, "d.complete", t.Hash)
 	if err != nil {
 		return s, errors.Wrap(err, "d.complete XMLRPC call failed")
 	}
 	s.Completed = results.([]interface{})[0].(int) > 0
 	// CompletedBytes
-	results, err = r.xmlrpcClient.Call("d.completed_bytes", t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, "d.completed_bytes", t.Hash)
 	if err != nil {
 		return s, errors.Wrap(err, "d.completed_bytes XMLRPC call failed")
 	}
 	s.CompletedBytes = results.([]interface{})[0].(int)
 	// DownRate
-	results, err = r.xmlrpcClient.Call("d.down.rate", t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, "d.down.rate", t.Hash)
 	if err != nil {
 		return s, errors.Wrap(err, "d.down.rate XMLRPC call failed")
 	}
 	s.DownRate = results.([]interface{})[0].(int)
 	// UpRate
-	results, err = r.xmlrpcClient.Call("d.up.rate", t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, "d.up.rate", t.Hash)
 	if err != nil {
 		return s, errors.Wrap(err, "d.up.rate XMLRPC call failed")
 	}
 	s.UpRate = results.([]interface{})[0].(int)
 	// Ratio
-	results, err = r.xmlrpcClient.Call("d.ratio", t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, "d.ratio", t.Hash)
 	if err != nil {
 		return s, errors.Wrap(err, "d.ratio XMLRPC call failed")
 	}
 	s.Ratio = float64(results.([]interface{})[0].(int)) / float64(1000)
 	// Size
-	results, err = r.xmlrpcClient.Call("d.size_bytes", t.Hash)
+	results, err = r.xmlrpcClient.Call(ctx, "d.size_bytes", t.Hash)
 	if err != nil {
 		return s, errors.Wrap(err, "d.size_bytes XMLRPC call failed")
 	}
@@ -495,8 +541,8 @@ func (r *RTorrent) GetStatus(t Torrent) (Status, error) {
 }
 
 // StartTorrent starts the torrent
-func (r *RTorrent) StartTorrent(t Torrent) error {
-	_, err := r.xmlrpcClient.Call("d.start", t.Hash)
+func (r *Client) StartTorrent(ctx context.Context, t Torrent) error {
+	_, err := r.xmlrpcClient.Call(ctx, "d.start", t.Hash)
 	if err != nil {
 		return errors.Wrap(err, "d.start XMLRPC call failed")
 	}
@@ -504,8 +550,8 @@ func (r *RTorrent) StartTorrent(t Torrent) error {
 }
 
 // StopTorrent stops the torrent
-func (r *RTorrent) StopTorrent(t Torrent) error {
-	_, err := r.xmlrpcClient.Call("d.stop", t.Hash)
+func (r *Client) StopTorrent(ctx context.Context, t Torrent) error {
+	_, err := r.xmlrpcClient.Call(ctx, "d.stop", t.Hash)
 	if err != nil {
 		return errors.Wrap(err, "d.stop XMLRPC call failed")
 	}
@@ -513,8 +559,8 @@ func (r *RTorrent) StopTorrent(t Torrent) error {
 }
 
 // CloseTorrent closes the torrent
-func (r *RTorrent) CloseTorrent(t Torrent) error {
-	_, err := r.xmlrpcClient.Call("d.close", t.Hash)
+func (r *Client) CloseTorrent(ctx context.Context, t Torrent) error {
+	_, err := r.xmlrpcClient.Call(ctx, "d.close", t.Hash)
 	if err != nil {
 		return errors.Wrap(err, "d.close XMLRPC call failed")
 	}
@@ -522,8 +568,8 @@ func (r *RTorrent) CloseTorrent(t Torrent) error {
 }
 
 // OpenTorrent opens the torrent
-func (r *RTorrent) OpenTorrent(t Torrent) error {
-	_, err := r.xmlrpcClient.Call("d.open", t.Hash)
+func (r *Client) OpenTorrent(ctx context.Context, t Torrent) error {
+	_, err := r.xmlrpcClient.Call(ctx, "d.open", t.Hash)
 	if err != nil {
 		return errors.Wrap(err, "d.open XMLRPC call failed")
 	}
@@ -531,8 +577,8 @@ func (r *RTorrent) OpenTorrent(t Torrent) error {
 }
 
 // PauseTorrent pauses the torrent
-func (r *RTorrent) PauseTorrent(t Torrent) error {
-	_, err := r.xmlrpcClient.Call("d.pause", t.Hash)
+func (r *Client) PauseTorrent(ctx context.Context, t Torrent) error {
+	_, err := r.xmlrpcClient.Call(ctx, "d.pause", t.Hash)
 	if err != nil {
 		return errors.Wrap(err, "d.pause XMLRPC call failed")
 	}
@@ -540,8 +586,8 @@ func (r *RTorrent) PauseTorrent(t Torrent) error {
 }
 
 // ResumeTorrent resumes the torrent
-func (r *RTorrent) ResumeTorrent(t Torrent) error {
-	_, err := r.xmlrpcClient.Call("d.resume", t.Hash)
+func (r *Client) ResumeTorrent(ctx context.Context, t Torrent) error {
+	_, err := r.xmlrpcClient.Call(ctx, "d.resume", t.Hash)
 	if err != nil {
 		return errors.Wrap(err, "d.resume XMLRPC call failed")
 	}
@@ -549,8 +595,8 @@ func (r *RTorrent) ResumeTorrent(t Torrent) error {
 }
 
 // IsActive checks if the torrent is active
-func (r *RTorrent) IsActive(t Torrent) (bool, error) {
-	results, err := r.xmlrpcClient.Call("d.is_active", t.Hash)
+func (r *Client) IsActive(ctx context.Context, t Torrent) (bool, error) {
+	results, err := r.xmlrpcClient.Call(ctx, "d.is_active", t.Hash)
 	if err != nil {
 		return false, errors.Wrap(err, "d.is_active XMLRPC call failed")
 	}
@@ -559,8 +605,8 @@ func (r *RTorrent) IsActive(t Torrent) (bool, error) {
 }
 
 // IsOpen checks if the torrent is open
-func (r *RTorrent) IsOpen(t Torrent) (bool, error) {
-	results, err := r.xmlrpcClient.Call("d.is_open", t.Hash)
+func (r *Client) IsOpen(ctx context.Context, t Torrent) (bool, error) {
+	results, err := r.xmlrpcClient.Call(ctx, "d.is_open", t.Hash)
 	if err != nil {
 		return false, errors.Wrap(err, "d.is_open XMLRPC call failed")
 	}
@@ -570,8 +616,8 @@ func (r *RTorrent) IsOpen(t Torrent) (bool, error) {
 
 // State returns the state that the torrent is into
 // It returns: 0 for stopped, 1 for started/paused
-func (r *RTorrent) State(t Torrent) (int, error) {
-	results, err := r.xmlrpcClient.Call("d.state", t.Hash)
+func (r *Client) State(ctx context.Context, t Torrent) (int, error) {
+	results, err := r.xmlrpcClient.Call(ctx, "d.state", t.Hash)
 	if err != nil {
 		return 0, errors.Wrap(err, "d.state XMLRPC call failed")
 	}

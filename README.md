@@ -8,6 +8,8 @@
 
 > rTorrent XMLRPC Bindings for Go (golang)
 
+Fork of [github.com/mrobinsn/go-rtorrent](github.com/mrobinsn/go-rtorrent).
+
 ## Documentation
 [GoDoc](https://godoc.org/github.com/mrobinsn/go-rtorrent/rtorrent)
 
@@ -38,39 +40,6 @@ fmt.Printf("My rTorrent's name: %v", name)
 You can connect to a server using Basic Authentication by including the credentials in the endpoint URL:
 ```
 conn, _ := rtorrent.New("https://user:pass@my-rtorrent.com/RPC2", false)
-```
-
-## Command Line Utility
-A basic command line utility is included
-
-`go-rtorrent`
-
-```
-NAME:
-   rTorrent XMLRPC CLI - A new cli application
-
-USAGE:
-   go-rtorrent [global options] command [command options] [arguments...]
-
-VERSION:
-   1.0.0
-
-AUTHOR(S):
-   Michael Robinson <m@michaelrobinson.io>
-
-COMMANDS:
-   get-ip    retrieves the IP for this rTorrent instance
-   get-name    retrieves the name for this rTorrent instance
-   get-totals    retrieves the up/down totals for this rTorrent instance
-   get-torrents    retrieves the torrents from this rTorrent instance
-   get-files    retrieves the files for a specific torrent
-   help, h    Shows a list of commands or help for one command
-
-GLOBAL OPTIONS:
-   --endpoint "http://myrtorrent/RPC2"    rTorrent endpoint
-   --disable-cert-check            disable certificate checking on this endpoint, useful for testing
-   --help, -h                show help
-   --version, -v            print the version
 ```
 
 ## Contributing
