@@ -2,8 +2,12 @@ package xmlrpc
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
+	"io"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -12,24 +16,46 @@ import (
 type Client struct {
 	addr       string
 	httpClient *http.Client
+
+	BasicUser string
+	BasicPass string
+
+	log *log.Logger
+}
+
+type Config struct {
+	Addr          string
+	TLSSkipVerify bool
+
+	BasicUser string
+	BasicPass string
+
+	Log *log.Logger
 }
 
 // NewClient returns a new instance of Client
-// Pass in a true value for `insecure` to turn off certificate verification
-func NewClient(addr string, insecure bool) *Client {
+func NewClient(cfg Config) *Client {
+	c := &Client{
+		addr:      cfg.Addr,
+		BasicUser: cfg.BasicUser,
+		BasicPass: cfg.BasicPass,
+		log:       log.New(io.Discard, "", log.LstdFlags),
+	}
 	transport := &http.Transport{}
-	if insecure {
+	if cfg.TLSSkipVerify {
 		transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 	}
 
-	httpClient := &http.Client{Transport: transport}
+	c.httpClient = &http.Client{Transport: transport, Timeout: 60 * time.Second}
 
-	return &Client{
-		addr:       addr,
-		httpClient: httpClient,
+	// override logger if we pass one
+	if cfg.Log != nil {
+		c.log = cfg.Log
 	}
+
+	return c
 }
 
 // NewClientWithHTTPClient returns a new instance of Client.
@@ -43,12 +69,20 @@ func NewClientWithHTTPClient(addr string, client *http.Client) *Client {
 
 // Call calls the method with "name" with the given args
 // Returns the result, and an error for communication errors
-func (c *Client) Call(name string, args ...interface{}) (interface{}, error) {
-	req := bytes.NewBuffer(nil)
-	if err := Marshal(req, name, args...); err != nil {
+func (c *Client) Call(ctx context.Context, name string, args ...interface{}) (interface{}, error) {
+	data := bytes.NewBuffer(nil)
+	if err := Marshal(data, name, args...); err != nil {
 		return nil, errors.Wrap(err, "failed to marshal request")
 	}
-	resp, err := c.httpClient.Post(c.addr, "text/xml", req)
+
+	req, err := http.NewRequestWithContext(ctx, c.addr, "text/xml", data)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request failed")
+	}
+
+	c.addBasicAuth(req)
+
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "POST failed")
 	}
@@ -59,4 +93,10 @@ func (c *Client) Call(name string, args ...interface{}) (interface{}, error) {
 		err = errors.Errorf("Error: %v: %v", err, fault)
 	}
 	return val, err
+}
+
+func (c *Client) addBasicAuth(req *http.Request) {
+	if c.BasicUser != "" && c.BasicPass != "" {
+		req.SetBasicAuth(c.BasicUser, c.BasicPass)
+	}
 }
