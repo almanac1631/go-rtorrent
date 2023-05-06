@@ -26,15 +26,16 @@ To use it in application, import `"github.com/autobrr/go-rtorrent"`
 
 ## Library Usage
 
-```
-conn, _ := rtorrent.NewClient(rtorrent.Config{Addr: "http://my-rtorrent.com/RPC2"})
-name, _ := conn.Name(context.Background())
+```golang
+client := rtorrent.NewClient(rtorrent.Config{Addr: "http://my-rtorrent.com/RPC2"})
+name, _ := client.Name(context.Background())
 fmt.Printf("My rTorrent's name: %v", name)
 ```
 
 You can connect to a server using Basic Authentication by adding User and Pass to the config:
-```
-conn, _ := rtorrent.NewClient(rtorrent.Config{Addr: "http://my-rtorrent.com/RPC2", BasicUser: "user", BasicPass: "pass"})
+
+```golang
+client := rtorrent.NewClient(rtorrent.Config{Addr: "http://my-rtorrent.com/RPC2", BasicUser: "user", BasicPass: "pass"})
 ```
 
 ## Contributing
