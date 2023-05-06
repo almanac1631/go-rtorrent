@@ -75,10 +75,12 @@ func (c *Client) Call(ctx context.Context, name string, args ...interface{}) (in
 		return nil, errors.Wrap(err, "failed to marshal request")
 	}
 
-	req, err := http.NewRequestWithContext(ctx, c.addr, "text/xml", data)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.addr, data)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating request failed")
 	}
+
+	req.Header.Set("Content-Type", "text/xml")
 
 	c.addBasicAuth(req)
 
