@@ -3,7 +3,6 @@
 [![Coverage Status](https://coveralls.io/repos/github/mrobinsn/go-rtorrent/badge.svg?branch=master)](https://coveralls.io/github/mrobinsn/go-rtorrent?branch=master)
 [![MIT license](http://img.shields.io/badge/license-MIT-brightgreen.svg)](http://opensource.org/licenses/MIT)
 
-
 > rTorrent XMLRPC Bindings for Go (golang)
 
 Fork of [github.com/mrobinsn/go-rtorrent](github.com/mrobinsn/go-rtorrent).
@@ -21,24 +20,23 @@ Fork of [github.com/mrobinsn/go-rtorrent](github.com/mrobinsn/go-rtorrent).
 - Delete a torrent (including files)
 
 ## Installation
-To install the package, run `go get github.com/mrobinsn/go-rtorrent`
+To install the package, run `go get github.com/autobrr/go-rtorrent`
 
-To use it in application, import `"github.com/mrobinsn/go-rtorrent/rtorrent"`
-
-To install the command line utility, run `go install "github.com/mrobinsn/go-rtorrent"`
+To use it in application, import `"github.com/autobrr/go-rtorrent"`
 
 ## Library Usage
 
 ```
-conn, _ := rtorrent.New("http://my-rtorrent.com/RPC2", false)
-name, _ := conn.Name()
+conn, _ := rtorrent.NewClient(rtorrent.Config{Addr: "http://my-rtorrent.com/RPC2"})
+name, _ := conn.Name(context.Background())
 fmt.Printf("My rTorrent's name: %v", name)
 ```
 
-You can connect to a server using Basic Authentication by including the credentials in the endpoint URL:
+You can connect to a server using Basic Authentication by adding User and Pass to the config:
 ```
-conn, _ := rtorrent.New("https://user:pass@my-rtorrent.com/RPC2", false)
+conn, _ := rtorrent.NewClient(rtorrent.Config{Addr: "http://my-rtorrent.com/RPC2", BasicUser: "user", BasicPass: "pass"})
 ```
 
 ## Contributing
+
 Pull requests are welcome, please ensure you add relevant tests for any new/changed functionality.
