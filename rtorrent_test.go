@@ -2,7 +2,7 @@ package rtorrent
 
 import (
 	"context"
-	"io/ioutil"
+	"os"
 	"testing"
 	"time"
 
@@ -488,7 +488,7 @@ func TestRTorrent(t *testing.T) {
 		})
 
 		t.Run("with data", func(t *testing.T) {
-			b, err := ioutil.ReadFile("testdata/Fedora-i3-Live-x86_64-35.torrent")
+			b, err := os.ReadFile("testdata/Fedora-i3-Live-x86_64-35.torrent")
 			require.NoError(t, err)
 			require.NotEmpty(t, b)
 
@@ -562,7 +562,7 @@ func TestRTorrent(t *testing.T) {
 		})
 
 		t.Run("with data (stopped)", func(t *testing.T) {
-			b, err := ioutil.ReadFile("testdata/Fedora-i3-Live-x86_64-35.torrent")
+			b, err := os.ReadFile("testdata/Fedora-i3-Live-x86_64-35.torrent")
 			require.NoError(t, err)
 			require.NotEmpty(t, b)
 
