@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/autobrr/go-rtorrent/xmlrpc"
@@ -49,6 +50,12 @@ func NewClient(cfg Config) *Client {
 	}
 
 	return c
+}
+
+// WithHTTPClient allows you to a provide a custom http.Client.
+func (r *Client) WithHTTPClient(client *http.Client) *Client {
+	r.xmlrpcClient = xmlrpc.NewClientWithHTTPClient(r.addr, client)
+	return r
 }
 
 // FieldValue contains the Field and Value of an attribute on a rTorrent
