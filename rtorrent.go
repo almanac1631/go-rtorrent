@@ -67,6 +67,12 @@ func NewClient(cfg Config) *Client {
 	return c
 }
 
+// WithHTTPClient allows you to a provide a custom http.Client.
+func (r *Client) WithHTTPClient(client *http.Client) *Client {
+	r.xmlrpcClient = xmlrpc.NewClientWithHTTPClient(r.addr, client)
+	return r
+}
+
 func NewClientWithOpts(cfg Config, opts ...OptFunc) *Client {
 	c := &Client{
 		addr: cfg.Addr,
