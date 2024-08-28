@@ -17,6 +17,7 @@ import (
 type Client struct {
 	addr         string
 	xmlrpcClient *xmlrpc.Client
+	cfg          Config
 
 	log *log.Logger
 }
@@ -29,6 +30,20 @@ type Config struct {
 	BasicPass string
 
 	Log *log.Logger
+}
+
+type OptFunc func(*Client)
+
+func WithCustomClient(client *http.Client) OptFunc {
+	return func(c *Client) {
+		c.xmlrpcClient = xmlrpc.NewClient(xmlrpc.Config{
+			Addr:          c.cfg.Addr,
+			TLSSkipVerify: c.cfg.TLSSkipVerify,
+			BasicUser:     c.cfg.BasicUser,
+			BasicPass:     c.cfg.BasicPass,
+			Client:        client,
+		})
+	}
 }
 
 // NewClient returns a new instance of `Client`
@@ -56,6 +71,31 @@ func NewClient(cfg Config) *Client {
 func (r *Client) WithHTTPClient(client *http.Client) *Client {
 	r.xmlrpcClient = xmlrpc.NewClientWithHTTPClient(r.addr, client)
 	return r
+}
+
+func NewClientWithOpts(cfg Config, opts ...OptFunc) *Client {
+	c := &Client{
+		addr: cfg.Addr,
+		log:  log.New(io.Discard, "", log.LstdFlags),
+		cfg:  cfg,
+		xmlrpcClient: xmlrpc.NewClient(xmlrpc.Config{
+			Addr:          cfg.Addr,
+			TLSSkipVerify: cfg.TLSSkipVerify,
+			BasicUser:     cfg.BasicUser,
+			BasicPass:     cfg.BasicPass,
+		}),
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	// override logger if we pass one
+	if cfg.Log != nil {
+		c.log = cfg.Log
+	}
+
+	return c
 }
 
 // FieldValue contains the Field and Value of an attribute on a rTorrent

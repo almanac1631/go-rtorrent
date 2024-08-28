@@ -31,6 +31,8 @@ type Config struct {
 	BasicPass string
 
 	Log *log.Logger
+
+	Client *http.Client
 }
 
 // NewClient returns a new instance of Client
@@ -49,6 +51,10 @@ func NewClient(cfg Config) *Client {
 	}
 
 	c.httpClient = &http.Client{Transport: transport, Timeout: 60 * time.Second}
+
+	if cfg.Client != nil {
+		c.httpClient = cfg.Client
+	}
 
 	// override logger if we pass one
 	if cfg.Log != nil {
