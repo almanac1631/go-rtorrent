@@ -1,0 +1,100 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - "master"
+    tags:
+      - 'v*'
+    paths-ignore:
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/images/**'
+      - 'config.yaml'
+      - 'docker-compose.yml'
+      - 'Makefile'
+      - '**.md'
+  pull_request:
+    paths-ignore:
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/images/**'
+      - 'config.yaml'
+      - 'docker-compose.yml'
+      - 'Makefile'
+      - '**.md'
+
+env:
+  GO_VERSION: '1.23'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        config:
+          - container_image: "docker.io/crazymax/rtorrent-rutorrent:latest"
+            container_port: 8000
+            container_name: latest
+          - container_image: "docker.io/crazymax/rtorrent-rutorrent:4.3.1-0.9.8_3-0.13.8_2"
+            container_port: 8001
+            container_name: legacy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Start Docker Container
+        id: start-container
+        run: |
+          docker run -d --rm \
+            --name test-container-${{ matrix.config.container_name }} \
+            -p ${{ matrix.config.container_port }}:${DEFAULT_RPC_PORT} \
+            ${{ matrix.config.container_image }}
+        env:
+          DEFAULT_RPC_PORT: 8000
+
+      - name: Wait for Container Health to be Healthy
+        run: |
+          echo "Waiting for container health..."
+          for i in {1..10}; do
+          STATUS=$(docker inspect --format='{{.State.Health.Status}}' test-container-${{ matrix.config.container_name }})
+          echo "Current status: $STATUS"
+          if [ "$STATUS" = "healthy" ]; then
+           echo "Container is healthy!"
+           exit 0
+          fi
+          echo "Still waiting..."
+          sleep 5
+          done
+          echo "Container did not become healthy within the timeout!"
+          docker logs test-container-${{ matrix.config.container_name }}
+          exit 1
+
+      - name: Run Tests
+        env:
+          RTORRENT_TEST_URL: http://localhost:${{ matrix.config.container_port }}/RPC2
+        run: |
+          echo "Running tests against container ${{ matrix.config.container_name }}..."
+          go run gotest.tools/gotestsum@latest --junitfile unit-tests-${{ matrix.config.container_name }}.xml --format pkgname -- ./...
+
+      - name: Stop Docker Container
+        if: always()
+        run: |
+          echo "Stopping container ${{ matrix.config.container_name }}..."
+          docker stop test-container-${{ matrix.config.container_name }}
+
+      - name: Test Summary
+        uses: test-summary/action@v2
+        with:
+          paths: "unit-tests-${{ matrix.config.container_name }}.xml"
