@@ -524,6 +524,22 @@ func (r *Client) DeleteTied(ctx context.Context, t Torrent) error {
 	return nil
 }
 
+// SetForceDelete sets force delete flag
+func (r *Client) SetForceDelete(ctx context.Context, t Torrent, val bool) error {
+	var valStr string
+	if (val) {
+		valStr = "2"
+	} else {
+		valStr = "1"
+	}
+	
+	_, err := r.xmlrpcClient.Call(ctx, "d.set_custom5", t.Hash, valStr)
+	if err != nil {
+		return errors.Wrap(err, "d.set_custom5 (force delete) XMLRPC call failed")
+	}
+	return nil
+}
+
 // GetFiles returns all the files for a given `Torrent`
 func (r *Client) GetFiles(ctx context.Context, t Torrent) ([]File, error) {
 	args := []interface{}{t.Hash, 0, FPath.Query(), FSizeInBytes.Query()}
