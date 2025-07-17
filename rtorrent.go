@@ -515,6 +515,15 @@ func (r *Client) Delete(ctx context.Context, t Torrent) error {
 	return nil
 }
 
+// DeleteTied removes the torrent files
+func (r *Client) DeleteTied(ctx context.Context, t Torrent) error {
+	_, err := r.xmlrpcClient.Call(ctx, "d.delete_tied", t.Hash)
+	if err != nil {
+		return errors.Wrap(err, "d.delete_tied XMLRPC call failed")
+	}
+	return nil
+}
+
 // GetFiles returns all the files for a given `Torrent`
 func (r *Client) GetFiles(ctx context.Context, t Torrent) ([]File, error) {
 	args := []interface{}{t.Hash, 0, FPath.Query(), FSizeInBytes.Query()}
