@@ -533,9 +533,9 @@ func (r *Client) SetForceDelete(ctx context.Context, t Torrent, val bool) error 
 		valStr = "1"
 	}
 	
-	_, err := r.xmlrpcClient.Call(ctx, "d.set_custom5", t.Hash, valStr)
+	_, err := r.xmlrpcClient.Call(ctx, "d.custom5.set", t.Hash, valStr)
 	if err != nil {
-		return errors.Wrap(err, "d.set_custom5 (force delete) XMLRPC call failed")
+		return errors.Wrap(err, "d.custom5.set (force delete) XMLRPC call failed")
 	}
 	return nil
 }
