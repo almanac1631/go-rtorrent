@@ -162,6 +162,16 @@ func TestRTorrent(t *testing.T) {
 			require.GreaterOrEqual(t, status.Ratio, 0.0)
 			require.NotZero(t, status.Size)
 		})
+
+		t.Run("get trackers", func(t *testing.T) {
+			trackers, err := client.GetTrackers(ctx, torrent)
+			require.NoError(t, err)
+			require.Equal(t, []string{
+				"https://torrent.ubuntu.com/announce",
+				"https://ipv6.torrent.ubuntu.com/announce",
+				"dht://",
+			}, trackers)
+		})
 	}))
 
 	t.Run("torrent interactions", func(t *testing.T) {

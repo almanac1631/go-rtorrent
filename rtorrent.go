@@ -619,6 +619,24 @@ func (r *Client) GetStatus(ctx context.Context, t Torrent) (Status, error) {
 	return s, nil
 }
 
+func (r *Client) GetTrackers(ctx context.Context, t Torrent) ([]string, error) {
+	// Tracker
+	results, err := r.xmlrpcClient.Call(ctx, "t.multicall", t.Hash, "", "t.url=")
+	if err != nil {
+		return nil, errors.Wrap(err, "d.tracker XMLRPC call failed")
+	}
+	var trackers []string
+	for _, outerResult := range results.([]interface{}) {
+		for _, innerResult := range outerResult.([]interface{}) {
+			trackersInner := innerResult.([]interface{})
+			if len(trackersInner) > 0 {
+				trackers = append(trackers, trackersInner[0].(string))
+			}
+		}
+	}
+	return trackers, nil
+}
+
 // StartTorrent opens and starts the torrent
 func (r *Client) StartTorrent(ctx context.Context, t Torrent) error {
 	_, err := r.xmlrpcClient.Call(ctx, "d.open", t.Hash)
