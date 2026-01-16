@@ -527,12 +527,12 @@ func (r *Client) DeleteTied(ctx context.Context, t Torrent) error {
 // SetForceDelete sets force delete flag
 func (r *Client) SetForceDelete(ctx context.Context, t Torrent, val bool) error {
 	var valStr string
-	if (val) {
+	if val {
 		valStr = "2"
 	} else {
 		valStr = "1"
 	}
-	
+
 	_, err := r.xmlrpcClient.Call(ctx, "d.custom5.set", t.Hash, valStr)
 	if err != nil {
 		return errors.Wrap(err, "d.custom5.set (force delete) XMLRPC call failed")
@@ -572,7 +572,14 @@ func (r *Client) SetLabel(ctx context.Context, t Torrent, newLabel string) error
 
 // GetStatus returns the Status for a given Torrent
 func (r *Client) GetStatus(ctx context.Context, t Torrent) (Status, error) {
-	var s Status
+	s := Status{
+		Completed:      false,
+		CompletedBytes: -1,
+		DownRate:       -1,
+		UpRate:         -1,
+		Ratio:          -1,
+		Size:           -1,
+	}
 	// Completed
 	results, err := r.xmlrpcClient.Call(ctx, "d.complete", t.Hash)
 	if err != nil {
@@ -612,38 +619,28 @@ func (r *Client) GetStatus(ctx context.Context, t Torrent) (Status, error) {
 	return s, nil
 }
 
-// StartTorrent starts the torrent
+// StartTorrent opens and starts the torrent
 func (r *Client) StartTorrent(ctx context.Context, t Torrent) error {
-	_, err := r.xmlrpcClient.Call(ctx, "d.start", t.Hash)
+	_, err := r.xmlrpcClient.Call(ctx, "d.open", t.Hash)
 	if err != nil {
-		return errors.Wrap(err, "d.start XMLRPC call failed")
+		return fmt.Errorf("d.open XMLRPC call failed: %w", err)
+	}
+	_, err = r.xmlrpcClient.Call(ctx, "d.start", t.Hash)
+	if err != nil {
+		return fmt.Errorf("d.start XMLRPC call failed: %w", err)
 	}
 	return nil
 }
 
-// StopTorrent stops the torrent
+// StopTorrent closes and stops the torrent
 func (r *Client) StopTorrent(ctx context.Context, t Torrent) error {
-	_, err := r.xmlrpcClient.Call(ctx, "d.stop", t.Hash)
-	if err != nil {
-		return errors.Wrap(err, "d.stop XMLRPC call failed")
-	}
-	return nil
-}
-
-// CloseTorrent closes the torrent
-func (r *Client) CloseTorrent(ctx context.Context, t Torrent) error {
 	_, err := r.xmlrpcClient.Call(ctx, "d.close", t.Hash)
 	if err != nil {
 		return errors.Wrap(err, "d.close XMLRPC call failed")
 	}
-	return nil
-}
-
-// OpenTorrent opens the torrent
-func (r *Client) OpenTorrent(ctx context.Context, t Torrent) error {
-	_, err := r.xmlrpcClient.Call(ctx, "d.open", t.Hash)
+	_, err = r.xmlrpcClient.Call(ctx, "d.stop", t.Hash)
 	if err != nil {
-		return errors.Wrap(err, "d.open XMLRPC call failed")
+		return fmt.Errorf("d.stop XMLRPC call failed: %w", err)
 	}
 	return nil
 }
