@@ -44,12 +44,12 @@ jobs:
             container_name: legacy
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -95,6 +95,6 @@ jobs:
           docker stop test-container-${{ matrix.config.container_name }}
 
       - name: Test Summary
-        uses: test-summary/action@v2
+        uses: test-summary/action@37b508cfee6d4d080eedd00b5bb240a6a784a6a5 # v2
         with:
           paths: "unit-tests-${{ matrix.config.container_name }}.xml"
